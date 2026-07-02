@@ -13,7 +13,7 @@ function App() {
   const [message, setMessage] = useState('');
   const [targetWord, setTargetWord] = useState('');
   const [showModal, setShowModal] = useState(false);
-
+//teste
   const initGame = () => {
     setTargetWord(getRandomWord());
     setCells(Array(6).fill().map(() => Array(5).fill('')));
