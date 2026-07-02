@@ -13,9 +13,12 @@ function App() {
   const [message, setMessage] = useState('');
   const [targetWord, setTargetWord] = useState('');
   const [showModal, setShowModal] = useState(false);
-//teste
-  const initGame = () => {
-    setTargetWord(getRandomWord());
+  
+  // 1. Estados adicionados para Modo Dark e Estatísticas
+  const [darkMode, setDarkMode] = useState(false);
+  const [wins, setWins] = useState(0);
+  const [losses, setLosses] = useState(0);
+  const initGame = async () => {
     setCells(Array(6).fill().map(() => Array(5).fill('')));
     setCellsStatus(Array(6).fill().map(() => Array(5).fill('')));
     setCurrentRow(0);
@@ -23,17 +26,39 @@ function App() {
     setGameOver(false);
     setUsedLetters(new Set());
     setMessage('');
+
+    // Lista reserva de palavras para o jogo nunca travar na palavra "TERMO"
+    const palavrasReserva = [
+      "CHAVE", "PORTA", "MENTE", "FORTE", "VITAL", 
+      "PLANO", "TEMPO", "VALOR", "BRAVO", "MUNDO", 
+      "CAMPO", "JUSTO", "LINDO", "FESTA", "FONTE"
+    ];
+
+    try {
+      // Tenta buscar uma palavra aleatória no Dicionário Aberto
+      const response = await fetch('https://dicionario-aberto.net');
+      const data = await response.json();
+      
+      // Valida se a palavra retornada tem exatamente 5 letras
+      if (data.word && data.word.length === 5) {
+        // Limpa acentos e joga para maiúsculo
+        const palavraLimpa = data.word.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        setTargetWord(palavraLimpa);
+      } else {
+        // Se a palavra da API não tiver 5 letras, pega uma da nossa lista reserva
+        const sorteada = palavrasReserva[Math.floor(Math.random() * palavrasReserva.length)];
+        setTargetWord(sorteada);
+      }
+    } catch (error) {
+      // Se a API falhar ou der erro de rede, escolhe uma da lista reserva de forma aleatória
+      const sorteada = palavrasReserva[Math.floor(Math.random() * palavrasReserva.length)];
+      setTargetWord(sorteada);
+    }
   };
 
-  const getRandomWord = () => {
-    const words = [
-      "ABRIR", "AMIGO", "BANHO", "CAIXA", "DIZER",
-      "FALAR", "GOSTO", "HORAS", "JOGAR", "LIVRO",
-      "NOITE", "OCUPA", "PAPEL", "QUASE",
-      "RADIO", "SABER", "TARDE", "UNIDO", "VIVER"
-    ];
-    return words[Math.floor(Math.random() * words.length)];
-  };
+
+  // Pode apagar a função getRandomWord antiga, ela não será mais necessária!
+
 
   const handleKeyPress = (key) => {
     if (gameOver) return;
@@ -48,22 +73,18 @@ function App() {
       }
     } else if (key === 'Backspace') {
       if (currentCell > 0 && cells[currentRow][currentCell - 1] !== '') {
-        // Remove a letra da posição anterior
         const newCells = [...cells];
         newCells[currentRow][currentCell - 1] = '';
         setCells(newCells);
         setCurrentCell(currentCell - 1);
       } else if (currentCell > 0 && cells[currentRow][currentCell - 1] === '') {
-        // Se a célula atual está vazia, volta para a anterior
         setCurrentCell(currentCell - 1);
       }
     } else if (/^[A-Za-z]$/.test(key) && currentCell < 5) {
-      // Adiciona a letra apenas se houver espaço
       const newCells = [...cells];
       newCells[currentRow][currentCell] = key.toUpperCase();
       setCells(newCells);
 
-      // Move para a próxima célula se não for a última
       if (currentCell < 4) {
         setCurrentCell(currentCell + 1);
       }
@@ -74,7 +95,6 @@ function App() {
     const guess = cells[currentRow].map(cell => cell.toUpperCase()).join('');
 
     if (guess === targetWord) {
-      // Palavra correta, atualizar estado para mostrar vitória
       setCellsStatus(prevStatus => {
         const newStatus = [...prevStatus];
         newStatus[currentRow] = Array(5).fill('right');
@@ -82,29 +102,28 @@ function App() {
       });
       setMessage('Acertou!');
       setGameOver(true);
+      
+      // 2. Incrementa vitória
+      setWins(prev => prev + 1);
 
-      // Reiniciar o jogo após 2 segundos
       setTimeout(initGame, 2000);
     } else {
-      // Palavra incorreta, atualizar o status das células
       let guessStatus = Array(5).fill('wrong');
       const targetLetters = targetWord.split('');
 
-      // Primeiro passo: verificar letras corretas
       for (let i = 0; i < 5; i++) {
         if (cells[currentRow][i].toUpperCase() === targetLetters[i]) {
           guessStatus[i] = 'right';
-          targetLetters[i] = null; // Marcar como verificada
+          targetLetters[i] = null;
         }
       }
 
-      // Segundo passo: verificar letras no lugar errado
       for (let i = 0; i < 5; i++) {
         if (guessStatus[i] !== 'right') {
           const index = targetLetters.indexOf(cells[currentRow][i].toUpperCase());
           if (index !== -1) {
             guessStatus[i] = 'place';
-            targetLetters[index] = null; // Marcar como verificada
+            targetLetters[index] = null;
           }
         }
       }
@@ -115,13 +134,9 @@ function App() {
         return newStatus;
       });
 
-      // Atualizar letras usadas
       const newUsedLetters = new Set(usedLetters);
       cells[currentRow].forEach((letter, index) => {
-        // Só adiciona se for completamente errada (status 'wrong')
-        // E não está em nenhuma posição da palavra alvo
         if (guessStatus[index] === 'wrong') {
-          // Verifica se a letra não aparece em nenhuma posição da palavra alvo
           if (!targetWord.includes(letter.toUpperCase())) {
             newUsedLetters.add(letter.toUpperCase());
           }
@@ -129,15 +144,15 @@ function App() {
       });
       setUsedLetters(newUsedLetters);
 
-      // Verificar condição de derrota
       if (currentRow === 5) {
         setMessage(`Tente novamente! A palavra era ${targetWord}`);
         setGameOver(true);
+        
+        // 3. Incrementa derrota
+        setLosses(prev => prev + 1);
 
-        // Reiniciar o jogo após 2 segundos
         setTimeout(initGame, 2000);
       } else {
-        // Passar para a próxima linha
         setCurrentRow(currentRow + 1);
         setCurrentCell(0);
       }
@@ -145,7 +160,7 @@ function App() {
   };
 
   useEffect(() => {
-    initGame(); // Inicializa o jogo quando o componente é montado
+    initGame();
   }, []);
 
   useEffect(() => {
@@ -160,10 +175,28 @@ function App() {
     };
   }, [currentRow, currentCell, gameOver, cells]);
 
+  // 4. Cálculo da porcentagem de vitórias baseado no total de jogos
+  const totalGames = wins + losses;
+  const winPercentage = totalGames > 0 ? Math.round((wins / totalGames) * 100) : 0;
+
   return (
-    <div className="container">
+    // 5. Inserida classe condicional 'dark-mode' na div principal
+    <div className={`container ${darkMode ? 'dark-mode' : ''}`}>
+      <div className="header-actions">
+        <button className="theme-btn" onClick={() => setDarkMode(!darkMode)}>
+          {darkMode ? 'Modo Clarinho' : 'Modo Escurinho'}
+        </button>
+      </div>
+
       <h1>Termo Clone</h1>
-      <p>{targetWord}</p>
+{/* <p>{targetWord}</p> */}
+
+      {/* 6. Painel de Estatísticas adicionado */}
+      <div className="stats-container">
+        <span>Vitórias: {wins} ({winPercentage}%)</span>
+        <span>Derrotas: {losses}</span>
+      </div>
+
       <Board
         cells={cells}
         cellsStatus={cellsStatus}
